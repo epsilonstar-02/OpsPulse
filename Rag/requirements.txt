@@ -1,0 +1,19 @@
+# NOTE: Requires Python 3.10-3.12 (Python 3.14 not fully supported yet)
+# Install with: pip install -r requirements.txt --prefer-binary
+
+# Core dependencies
+pathway>=0.8.0
+litellm>=1.35
+google-generativeai>=0.3.0
+pandas>=2.0.0
+pyyaml>=6.0
+requests>=2.31.0
+
+# PDF parsing (lightweight)
+pdfplumber>=0.10.0
+
+# Vector database for persistent embeddings
+chromadb>=0.4.0
+
+# Flask for REST API (ChromaDB server)
+flask>=3.0.0
