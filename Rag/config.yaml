@@ -1,0 +1,40 @@
+# RAG Pipeline Configuration for OpsPulse
+# Private RAG with Pathway and DeepSeek
+
+# DeepSeek LLM Configuration (locally hosted)
+llm:
+  model: "deepseek/deepseek-r1"
+  api_base: "http://34.171.226.157:8080"
+  temperature: 0
+  top_p: 1
+
+# Embedding Model Configuration (Gemini)
+embedding:
+  model: "gemini/text-embedding-004"
+  dimension: 3072
+  api_key: "AIzaSyAUefoYrvTVnyKVuIR-MMeZBB21rTCtUzs"
+
+# Document Source Configuration - PDF Runbooks
+documents:
+  path: "../run book"
+  format: "pdf"
+  chunk_size: 1000
+  chunk_overlap: 200
+  mode: "static"  # Use "static" for PDFs
+
+# Retrieval Configuration
+retrieval:
+  # Adaptive RAG parameters
+  n_starting_documents: 3
+  factor: 2
+  max_iterations: 5
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+
+# ChromaDB Configuration (persistent vector store)
+chroma:
+  persist_directory: "./chroma_db"
+  collection_name: "opspulse_runbooks"
