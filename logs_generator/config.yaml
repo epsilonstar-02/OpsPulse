@@ -1,0 +1,110 @@
+# Synthetic Logs Generator Configuration
+
+generator:
+  # Number of logs to generate per batch
+  batch_size: 100
+  # Interval between batches in seconds (for streaming mode)
+  interval: 1.0
+  # Total logs to generate (0 = unlimited in streaming mode)
+  total_logs: 1000
+
+# Log sources to simulate
+sources:
+  - name: "web-server"
+    weight: 0.4
+    services: ["nginx", "apache", "traefik"]
+  - name: "application"
+    weight: 0.3
+    services: ["auth-service", "payment-service", "user-service", "order-service", "inventory-service"]
+  - name: "database"
+    weight: 0.15
+    services: ["postgresql", "mongodb", "redis"]
+  - name: "infrastructure"
+    weight: 0.15
+    services: ["kubernetes", "docker", "prometheus", "grafana"]
+
+# Normal log distribution
+normal_logs:
+  log_levels:
+    INFO: 0.70
+    DEBUG: 0.15
+    WARNING: 0.10
+    ERROR: 0.04
+    CRITICAL: 0.01
+  
+  # Response time range (ms) for normal operations
+  response_time:
+    min: 10
+    max: 500
+    mean: 150
+    std: 50
+
+# Anomaly configuration
+anomalies:
+  # Probability of anomaly in each log batch (0.0 to 1.0)
+  probability: 0.05
+  
+  types:
+    # Sudden spike in errors
+    error_spike:
+      enabled: true
+      weight: 0.25
+      duration_logs: 20
+      error_rate: 0.8
+    
+    # Gradual performance degradation
+    latency_degradation:
+      enabled: true
+      weight: 0.20
+      duration_logs: 50
+      multiplier: 5.0
+    
+    # Security threat patterns
+    security_threat:
+      enabled: true
+      weight: 0.15
+      types: ["brute_force", "sql_injection", "xss_attempt", "unauthorized_access"]
+    
+    # Resource exhaustion
+    resource_exhaustion:
+      enabled: true
+      weight: 0.15
+      resources: ["memory", "cpu", "disk", "connections"]
+    
+    # Service outage
+    service_outage:
+      enabled: true
+      weight: 0.15
+      duration_logs: 30
+    
+    # Data anomaly (unusual patterns)
+    data_anomaly:
+      enabled: true
+      weight: 0.10
+      types: ["null_values", "out_of_range", "format_error"]
+
+# Output configuration
+output:
+  # Format: json, text, or both
+  format: "json"
+  
+  # Output destination: stdout, file, or both
+  destination: "file"
+  
+  # File output settings
+  file:
+    path: "./output/logs"
+    rotation_size_mb: 10
+    max_files: 5
+  
+  # Include metadata for ML training
+  include_labels: true
+
+# Timestamp configuration
+timestamps:
+  # Start from current time or specific datetime
+  start: "now"
+  # Time increment between logs (seconds)
+  increment:
+    min: 0.001
+    max: 2.0
