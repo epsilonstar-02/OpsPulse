@@ -5,7 +5,7 @@
 llm:
   # Use openai/ prefix for OpenAI-compatible endpoints (llama.cpp)
   model: "openai/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M"
-  api_base: "http://34.171.226.157:8080/v1"
+  api_base: "http://localhost:8080/v1"  # Use localhost since DeepSeek is on same VM
   temperature: 0
   top_p: 1
 
