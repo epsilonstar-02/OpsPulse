@@ -1,0 +1,27 @@
+# NOTE: Requires Python 3.10-3.12 (Python 3.14 not fully supported yet)
+# Install with: pip install -r requirements.txt --prefer-binary
+
+# Core dependencies
+litellm>=1.35
+google-generativeai>=0.3.0
+pandas>=2.0.0
+pyyaml>=6.0
+requests>=2.31.0
+
+# PDF parsing (lightweight)
+pdfplumber>=0.10.0
+
+# Vector database for persistent embeddings
+chromadb>=0.4.0
+
+# Flask for REST API (ChromaDB server)
+flask>=3.0.0
+
+# Pathway for streaming RAG server (server.py, rag_pipeline.py)
+# Note: Pathway requires Linux/macOS - Windows not supported
+# For Windows users, use chroma_rag_server.py instead
+pathway>=0.15.0; sys_platform != 'win32'
+
+# HTTP client for RAG integration
+httpx>=0.27.0
+aiohttp>=3.9.0

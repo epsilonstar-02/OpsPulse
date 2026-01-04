@@ -1,0 +1,23 @@
+[project]
+name = "opspulse-ai"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "chromadb>=0.4.0",
+    "faker>=18.0.0",
+    "fastapi>=0.109.0",
+    "flask>=3.0.0",
+    "google-generativeai>=0.3.0",
+    "httpx>=0.28.1",
+    "litellm>=1.35",
+    "numpy>=1.24.0",
+    "openai>=2.14.0",
+    "pandas>=2.0.0",
+    "pdfplumber>=0.10.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "requests>=2.31.0",
+    "uvicorn[standard]>=0.27.0",
+]

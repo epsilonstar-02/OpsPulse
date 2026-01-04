@@ -1,0 +1,15 @@
+[Unit]
+Description=OpsPulse.ai Log Generator
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/OpsPulse.ai
+ExecStart=/home/ubuntu/OpsPulse.ai/venv/bin/python3 -m uvicorn logs_generator.server:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

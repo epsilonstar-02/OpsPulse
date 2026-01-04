@@ -1,0 +1,43 @@
+# RAG Pipeline Configuration for OpsPulse
+# Private RAG with Pathway and DeepSeek
+
+# DeepSeek LLM Configuration (locally hosted via llama.cpp)
+llm:
+  # Use openai/ prefix for OpenAI-compatible endpoints (llama.cpp)
+  model: "openai/unsloth/DeepSeek-R1-Distill-Qwen-1.5B-GGUF:Q4_K_M"
+  api_base: "http://34.171.226.157:8080/v1"
+  temperature: 0
+  top_p: 1
+
+# Embedding Model Configuration (Gemini)
+# Set GOOGLE_API_KEY environment variable before running
+embedding:
+  model: "gemini/text-embedding-004"
+  dimension: 768
+  # api_key: Set via GOOGLE_API_KEY environment variable
+
+# Document Source Configuration - PDF Runbooks
+documents:
+  path: "../run book"
+  format: "pdf"
+  chunk_size: 1000
+  chunk_overlap: 200
+  mode: "static"  # Use "static" for PDFs
+
+# Retrieval Configuration
+retrieval:
+  # Adaptive RAG parameters
+  n_starting_documents: 3
+  factor: 2
+  max_iterations: 5
+
+# Server Configuration
+# Note: Port 5000 to avoid conflict with DeepSeek API on 8080
+server:
+  host: "0.0.0.0"
+  port: 5000
+
+# ChromaDB Configuration (persistent vector store)
+chroma:
+  persist_directory: "./chroma_db"
+  collection_name: "opspulse_runbooks"
