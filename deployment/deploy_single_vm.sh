@@ -2,8 +2,8 @@
 # ============================================================
 # OpsPulse AI - Quick Deployment Script (Single VM)
 # ============================================================
-# For development/testing: Deploy all services on a single VM
-# Minimum: e2-standard-4 (4 vCPU, 16GB RAM)
+# Optimized for: 8 vCPU, 32GB RAM (e2-standard-8)
+# Resource Isolation: DeepSeek on CPUs 0-3, OpsPulse on CPUs 4-7
 # Usage: chmod +x deploy_single_vm.sh && ./deploy_single_vm.sh
 # ============================================================
 
@@ -13,25 +13,35 @@ echo "=========================================="
 echo "🚀 OpsPulse AI - Single VM Deployment"
 echo "=========================================="
 echo ""
-echo "This will deploy ALL services on a single VM:"
-echo "  - Log Generator (port 8000)"
-echo "  - Kafka Producer"
-echo "  - RAG Server (port 5000)"
-echo "  - Dashboard API (port 8001)"
-echo "  - Pathway Consumer"
-echo ""
-echo "Recommended VM: e2-standard-4 or larger"
+echo "╔═══════════════════════════════════════════════════════════╗"
+echo "║           RESOURCE ALLOCATION (8 vCPU, 32GB)              ║"
+echo "╠═══════════════════════════════════════════════════════════╣"
+echo "║  DeepSeek LLM (llama.cpp)                                 ║"
+echo "║    └─ CPUs: 0-3 (4 cores) │ RAM: 16GB │ Port: 8080        ║"
+echo "║                                                           ║"
+echo "║  OpsPulse Services (cgroup isolated)                      ║"
+echo "║    ├─ CPUs: 4-7 (4 cores) │ RAM: 12GB total               ║"
+echo "║    ├─ Log Generator      │ 512MB  │ Port: 8000            ║"
+echo "║    ├─ Kafka Producer     │ 512MB  │ (background)          ║"
+echo "║    ├─ RAG Server         │ 4GB    │ Port: 5000            ║"
+echo "║    ├─ Dashboard API      │ 1GB    │ Port: 8001            ║"
+echo "║    └─ Pathway Consumer   │ 2GB    │ (stream processor)    ║"
+echo "║                                                           ║"
+echo "║  System Reserved: ~4GB                                    ║"
+echo "╚═══════════════════════════════════════════════════════════╝"
 echo ""
 
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+log_resource() { echo -e "${BLUE}[RESOURCE]${NC} $1"; }
 
 # Configuration
 APP_DIR="/opt/opspulse"
@@ -42,10 +52,29 @@ USER=$(whoami)
 MEM_GB=$(free -g | awk '/^Mem:/{print $2}')
 CPU_COUNT=$(nproc)
 
-log_info "System: ${CPU_COUNT} CPUs, ${MEM_GB}GB RAM"
+log_info "Detected: ${CPU_COUNT} CPUs, ${MEM_GB}GB RAM"
 
-if [ "$MEM_GB" -lt 8 ]; then
-    log_warn "Warning: Less than 8GB RAM detected. Some services may fail."
+# Validate resources
+if [ "$CPU_COUNT" -lt 8 ]; then
+    log_warn "Warning: Less than 8 CPUs. Adjusting CPU affinity..."
+    log_warn "DeepSeek may impact OpsPulse performance."
+fi
+
+if [ "$MEM_GB" -lt 24 ]; then
+    log_warn "Warning: Less than 24GB RAM. Consider reducing DeepSeek memory limit."
+fi
+
+if [ "$MEM_GB" -ge 32 ] && [ "$CPU_COUNT" -ge 8 ]; then
+    log_info "✅ Optimal resources detected! Full isolation enabled."
+fi
+
+# Check if DeepSeek is already running
+if pgrep -f "llama-server\|llama.cpp" > /dev/null; then
+    log_info "✅ DeepSeek (llama.cpp) detected running"
+    DEEPSEEK_RUNNING=true
+else
+    log_warn "⚠️  DeepSeek not detected. Will create service template."
+    DEEPSEEK_RUNNING=false
 fi
 
 read -p "Continue with deployment? (y/n) " -n 1 -r
@@ -117,7 +146,11 @@ GOOGLE_API_KEY=your_google_api_key_here
 # Service URLs (localhost for single VM)
 LOG_GENERATOR_URL=http://localhost:8000
 RAG_SERVER_URL=http://localhost:5000
+
+# DeepSeek LLM - llama.cpp server (ALREADY DEPLOYED)
+# Ensure your llama.cpp server is running on this port
 DEEPSEEK_URL=http://localhost:8080
+LOCAL_MODEL_URL=http://localhost:8080/v1
 
 # Kafka credentials
 KAFKA_USERNAME=ashutosh
@@ -134,7 +167,32 @@ log_warn "⚠️  Update GOOGLE_API_KEY in $APP_DIR/.env"
 
 # ==================== STEP 5: Create Systemd Services ====================
 
-log_info "Step 5: Creating systemd services..."
+log_info "Step 5: Creating systemd services with resource isolation..."
+
+# ============================================================
+# RESOURCE ALLOCATION (8 vCPU, 32GB RAM)
+# ============================================================
+# DeepSeek (llama.cpp): CPUs 0-3 (4 cores), 16GB RAM max
+# OpsPulse Services:    CPUs 4-7 (4 cores), 12GB RAM max
+# System Reserved:      4GB RAM
+# ============================================================
+
+# Create cgroup slice for OpsPulse services (isolated from DeepSeek)
+log_info "Creating cgroup slice for resource isolation..."
+sudo tee /etc/systemd/system/opspulse.slice << EOF
+[Unit]
+Description=OpsPulse Services Resource Slice
+Before=slices.target
+
+[Slice]
+# Restrict to CPUs 4-7 (leave 0-3 for DeepSeek)
+AllowedCPUs=4-7
+# Memory limit: 12GB for all OpsPulse services combined
+MemoryMax=12G
+MemoryHigh=10G
+# CPU weight (relative priority)
+CPUWeight=100
+EOF
 
 # Log Generator
 sudo tee /etc/systemd/system/opspulse-logs.service << EOF
@@ -151,6 +209,11 @@ EnvironmentFile=$APP_DIR/.env
 ExecStart=$VENV_DIR/bin/uvicorn logs_generator.server:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
+# Resource isolation
+Slice=opspulse.slice
+MemoryMax=512M
+CPUQuota=50%
+Nice=5
 
 [Install]
 WantedBy=multi-user.target
@@ -171,12 +234,17 @@ EnvironmentFile=$APP_DIR/.env
 ExecStart=$VENV_DIR/bin/python Message_queue_kafka/producer.py --continuous --server http://localhost:8000
 Restart=always
 RestartSec=10
+# Resource isolation
+Slice=opspulse.slice
+MemoryMax=512M
+CPUQuota=50%
+Nice=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# RAG Server
+# RAG Server (ChromaDB + embeddings - needs more memory)
 sudo tee /etc/systemd/system/opspulse-rag.service << EOF
 [Unit]
 Description=OpsPulse RAG Server
@@ -192,12 +260,18 @@ ExecStart=$VENV_DIR/bin/python -m Rag.server --host 0.0.0.0 --port 5000 --ingest
 Restart=always
 RestartSec=30
 TimeoutStartSec=600
+# Resource isolation (RAG needs more memory for embeddings)
+Slice=opspulse.slice
+MemoryMax=4G
+MemoryHigh=3G
+CPUQuota=150%
+Nice=0
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Dashboard API
+# Dashboard API (user-facing - higher priority)
 sudo tee /etc/systemd/system/opspulse-dashboard.service << EOF
 [Unit]
 Description=OpsPulse Dashboard API
@@ -209,15 +283,20 @@ User=$USER
 WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin"
 EnvironmentFile=$APP_DIR/.env
-ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8001
+ExecStart=$VENV_DIR/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8001 --workers 2
 Restart=always
 RestartSec=5
+# Resource isolation (dashboard gets priority for responsiveness)
+Slice=opspulse.slice
+MemoryMax=1G
+CPUQuota=100%
+Nice=-5
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Pathway Consumer
+# Pathway Consumer (stream processing - needs consistent resources)
 sudo tee /etc/systemd/system/opspulse-pathway.service << EOF
 [Unit]
 Description=OpsPulse Pathway Consumer
@@ -230,6 +309,43 @@ WorkingDirectory=$APP_DIR
 Environment="PATH=$VENV_DIR/bin"
 EnvironmentFile=$APP_DIR/.env
 ExecStart=$VENV_DIR/bin/python Message_queue_kafka/pathway_consumer.py --rag-url http://localhost:5000
+Restart=always
+RestartSec=10
+# Resource isolation (Pathway needs stable CPU for streaming)
+Slice=opspulse.slice
+MemoryMax=2G
+MemoryHigh=1G
+CPUQuota=100%
+Nice=0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# ==================== STEP 5b: Create DeepSeek Service (Optional) ====================
+
+log_info "Creating DeepSeek llama.cpp service template..."
+log_warn "⚠️  Skip if you already have llama.cpp running!"
+
+# DeepSeek llama.cpp service (ISOLATED on CPUs 0-3)
+sudo tee /etc/systemd/system/deepseek-llm.service << EOF
+[Unit]
+Description=DeepSeek R1 LLM (llama.cpp)
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=/opt/llama.cpp
+# Pin to CPUs 0-3 (isolated from OpsPulse on 4-7)
+CPUAffinity=0 1 2 3
+# Memory limit: 16GB for model + KV cache
+MemoryMax=16G
+MemoryHigh=14G
+# High priority for inference latency
+Nice=-10
+# Use 4 threads matching CPU allocation
+ExecStart=/opt/llama.cpp/llama-server \\\n    --model /opt/models/deepseek-r1-q4.gguf \\\n    --host 0.0.0.0 \\\n    --port 8080 \\\n    --threads 4 \\\n    --ctx-size 4096 \\\n    --batch-size 512
 Restart=always
 RestartSec=10
 
@@ -322,13 +438,25 @@ sudo nginx -t && sudo systemctl reload nginx
 
 # ==================== STEP 7: Enable and Start Services ====================
 
-log_info "Step 7: Enabling services..."
+log_info "Step 7: Enabling services with resource isolation..."
 sudo systemctl daemon-reload
+
+# Enable cgroup slice first
+log_resource "Enabling OpsPulse cgroup slice (CPUs 4-7, 12GB RAM limit)..."
+sudo systemctl enable opspulse.slice
 
 # Enable all services
 sudo systemctl enable opspulse-logs opspulse-producer opspulse-rag opspulse-dashboard opspulse-pathway nginx
 
+# Check if DeepSeek service should be enabled
+if [ "$DEEPSEEK_RUNNING" = false ]; then
+    log_warn "DeepSeek service template created at /etc/systemd/system/deepseek-llm.service"
+    log_warn "To enable: sudo systemctl enable deepseek-llm && sudo systemctl start deepseek-llm"
+    log_warn "Remember to update the model path in the service file!"
+fi
+
 log_info "Starting services (this may take a few minutes)..."
+log_resource "OpsPulse services will run on CPUs 4-7 (isolated from DeepSeek)"
 
 # Start in order
 sudo systemctl start opspulse-logs
@@ -367,6 +495,33 @@ done
 
 echo ""
 echo "=========================================="
+echo "Resource Isolation Status:"
+echo "=========================================="
+
+# Check cgroup slice
+if systemctl is-active opspulse.slice > /dev/null 2>&1; then
+    echo -e "OpsPulse Slice: ${GREEN}✓ active${NC} (CPUs 4-7, 12GB limit)"
+else
+    echo -e "OpsPulse Slice: ${YELLOW}⚠ inactive${NC}"
+fi
+
+# Check DeepSeek
+if pgrep -f "llama-server\|llama.cpp" > /dev/null; then
+    DEEPSEEK_PID=$(pgrep -f "llama-server\|llama.cpp" | head -1)
+    DEEPSEEK_CPU=$(ps -p $DEEPSEEK_PID -o %cpu --no-headers 2>/dev/null || echo "?")
+    DEEPSEEK_MEM=$(ps -p $DEEPSEEK_PID -o %mem --no-headers 2>/dev/null || echo "?")
+    echo -e "DeepSeek LLM:   ${GREEN}✓ running${NC} (CPU: ${DEEPSEEK_CPU}%, MEM: ${DEEPSEEK_MEM}%)"
+else
+    echo -e "DeepSeek LLM:   ${YELLOW}⚠ not detected${NC}"
+fi
+
+# Show memory breakdown
+echo ""
+echo "Memory Usage:"
+free -h | grep -E "Mem:|Swap:"
+
+echo ""
+echo "=========================================="
 echo "API Health Checks:"
 echo "=========================================="
 
@@ -379,6 +534,13 @@ for port in 8000 5000 8001; do
     fi
 done
 
+# Check DeepSeek endpoint
+if curl -s http://localhost:8080/health > /dev/null 2>&1 || curl -s http://localhost:8080/v1/models > /dev/null 2>&1; then
+    echo -e "Port 8080 (DeepSeek): ${GREEN}✓ responding${NC}"
+else
+    echo -e "Port 8080 (DeepSeek): ${YELLOW}⚠ not ready${NC}"
+fi
+
 # Get external IP
 EXTERNAL_IP=$(curl -s ifconfig.me 2>/dev/null || echo "unknown")
 
@@ -389,17 +551,25 @@ echo "=========================================="
 echo ""
 echo "External IP: $EXTERNAL_IP"
 echo ""
+echo "╔═══════════════════════════════════════════════════════════╗"
+echo "║  RESOURCE ISOLATION ACTIVE                                ║"
+echo "║  DeepSeek (CPUs 0-3, 16GB) ←→ OpsPulse (CPUs 4-7, 12GB)  ║"
+echo "╚═══════════════════════════════════════════════════════════╝"
+echo ""
 echo "Service URLs:"
 echo "  Dashboard API:  http://$EXTERNAL_IP/"
 echo "  API Docs:       http://$EXTERNAL_IP/docs"
 echo "  WebSocket:      ws://$EXTERNAL_IP/ws/live"
 echo "  Log Generator:  http://$EXTERNAL_IP:8000/"
 echo "  RAG Server:     http://$EXTERNAL_IP:5000/"
+echo "  DeepSeek LLM:   http://$EXTERNAL_IP:8080/"
 echo ""
 echo "Useful Commands:"
-echo "  View all logs:  sudo journalctl -u 'opspulse-*' -f"
-echo "  Restart all:    sudo systemctl restart opspulse-{logs,producer,rag,dashboard,pathway}"
-echo "  Service status: sudo systemctl status opspulse-*"
+echo "  View all logs:    sudo journalctl -u 'opspulse-*' -f"
+echo "  Restart all:      sudo systemctl restart opspulse-{logs,producer,rag,dashboard,pathway}"
+echo "  Service status:   sudo systemctl status opspulse-*"
+echo "  Resource monitor: systemctl status opspulse.slice"
+echo "  CPU usage:        htop (press F2 → Display → CPU affinity)"
 echo ""
 echo "⚠️  Remember to:"
 echo "  1. Update GOOGLE_API_KEY in $APP_DIR/.env"

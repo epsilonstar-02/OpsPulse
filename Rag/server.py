@@ -222,28 +222,6 @@ def build_rag_server(config_path: str = "config.yaml", data_path: str = "../run 
     
     # Run the Pathway engine
     pw.run()
-        query_id=queries.id,
-        result=answer_with_geometric_rag_strategy_from_index(
-            queries.query,
-            index,
-            documents.doc,
-            model,
-            n_starting_documents=retrieval_config.get("n_starting_documents", 2),
-            factor=retrieval_config.get("factor", 2),
-            max_iterations=retrieval_config.get("max_iterations", 4),
-        ),
-    )
-    
-    # Write responses
-    response_writer(results)
-    
-    print(f"Starting RAG server on {host}:{port}")
-    print("Endpoints:")
-    print(f"  POST http://{host}:{port}/ - Query the RAG system")
-    print("  Body: {\"query\": \"your question here\"}")
-    
-    # Run the Pathway engine
-    pw.run()
 
 
 def run_simple_server(config_path: str = "config.yaml", data_path: str = "../run book"):

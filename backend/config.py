@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     API_VERSION: str = "1.0.0"
     API_DESCRIPTION: str = "Real-time analytics and monitoring API for OpsPulse AI"
     DEBUG: bool = False
+    ENVIRONMENT: str = "development"
+    
+    # Google API Key (for RAG embeddings - passed through)
+    GOOGLE_API_KEY: Optional[str] = None
     
     # Server Settings
     HOST: str = "0.0.0.0"
@@ -25,6 +29,7 @@ class Settings(BaseSettings):
     LOG_GENERATOR_URL: str = os.getenv("LOG_GENERATOR_URL", "http://localhost:8000")
     RAG_SERVER_URL: str = os.getenv("RAG_SERVER_URL", "http://localhost:5000")
     DEEPSEEK_URL: str = os.getenv("DEEPSEEK_URL", "http://localhost:8080")
+    LOCAL_MODEL_URL: Optional[str] = None
     
     # Kafka/Redpanda Settings
     KAFKA_BOOTSTRAP_SERVERS: str = "d5c2s6rrcoacstisf5a0.any.ap-south-1.mpx.prd.cloud.redpanda.com:9092"
@@ -53,6 +58,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra env vars not defined in Settings
 
 
 @lru_cache()
